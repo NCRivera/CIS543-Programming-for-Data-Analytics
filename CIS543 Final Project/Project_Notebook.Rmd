@@ -1,0 +1,453 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# LIBRARIES
+
+```{r}
+library(tidyverse)
+library(RMySQL)
+library(odbc)
+library(DBI)
+```
+
+# IMPORTING THE DATASET
+
+```{r}
+library("openxlsx")
+library("readxl")
+coronavirus_tweets <- read_excel("full_dataset.xlsx")
+str(coronavirus_tweets)
+```
+
+# CREATING THE AWS CONNECTION
+
+WE ARE CONNECTING TO AWS.
+
+```{r}
+connection <- DBI::dbConnect(
+    RMySQL::MySQL(), 
+    host = "database-ncrivera-stu.c1oquv6wmh3w.us-east-1.rds.amazonaws.com", 
+    dbname = "NRiveraDatabase",
+    port = 3306, 
+    user = "admin", 
+    password = "n1088191"
+)
+```
+
+
+# CHECKING THE TABLES WITHIN THE DATABASE
+
+
+```{r}
+tables <- dbListTables(connection)
+sort(tables)
+```
+
+# CREATING A TABLE TO HOUSE THE DATASET GENERATED
+
+```{r}
+dbCreateTable(connection, name = "coronavirus", fields = coronavirus_tweets, row.names = NULL)
+```
+
+
+# CHECKING THE TABLE TO CONFIRM EXISTENCE
+
+```{r}
+corona <- dbReadTable(connection,  "coronavirus")
+head(corona)
+str(corona)
+```
+
+
+```{r}
+# dbWriteTable(
+#     conn = connection, 
+#     name = "coronavirus", 
+#     value = coronavirus_tweets, 
+#     append = TRUE, 
+#     row.names = FALSE
+# )
+```
+
+
+
+```{r}
+# library("openxlsx")
+# library("readxl")
+# query <- dbSendQuery(conn = connection, statement = "SELECT * FROM coronavirus;")
+# coronavirus_tweets <- dbFetch(query, n = -1)
+
+coronavirus_tweets <- read_excel("full_dataset.xlsx")
+# dbClearResult(query)
+```
+
+# Text Analysis
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(tm)
+library(quanteda)
+```
+
+# CHecking the Dataset
+
+```{r}
+str(coronavirus_tweets)
+```
+
+# COUNT SPACES and OCCURRENCES
+
+```{r}
+negative_words <- 
+    
+    sum(str_detect(coronavirus_tweets$text, "kung|kung flu|wuhan|wuhan flu|chinavirus|evil"))
+
+cat("Number of tweets with 'Chinavirus':", cnt_chinavirus, "\n")
+```
+
+
+# HOW MANY HASHTAGS?
+
+```{r}
+sum(str_detect(coronavirus_tweets$text, '#'))
+```
+
+# NUMBER OF MENTIONS
+
+```{r}
+sum(str_detect(coronavirus_tweets$text, '@'))
+```
+
+# CORPUS CREATION
+
+```{r}
+tweetCorpus <- Corpus(VectorSource(coronavirus_tweets$text))
+tweetTDM <- TermDocumentMatrix(tweetCorpus)
+inspect(tweetTDM)
+```
+
+ 
+
+# DOCUMENT FEATURE MATRIX
+
+```{r}
+tweetDFM <- dfm(coronavirus_tweets$text,
+                remove_punct = TRUE,
+                remove = stopwords("english"))
+```
+
+ 
+
+# TOP FEATURES
+
+```{r}
+topfeatures(tweetDFM)
+```
+
+ 
+
+#  WEIGHT FREQUENCY 
+
+Now we have structured data to work with  
+
+```{r}
+textstat_frequency(tweetDFM)
+```
+
+ 
+
+
+# SELECTING #China
+
+```{r}
+sum(str_detect(
+  coronavirus_tweets$text, 'lie')
+)
+
+ 
+
+ChinaTweets <- 
+  subset(coronavirus_tweets,
+         str_detect(
+           text,
+           regex('lie',
+                 ignore_case = TRUE)
+         ))
+
+ 
+
+
+head(select(ChinaTweets, text))
+```
+
+```{r}
+sum(str_detect(coronavirus_tweets$text, "death|lie|china|spread|pandemic|outbreak|cause|disease|harm|killed|fake|tough"))
+```
+
+```{r}
+coronavirus_twts <- coronavirus_tweets %>% 
+    mutate(negative_tweet = if_else(str_detect(text, "death|lie|china|spread|pandemic|outbreak|cause|disease|harm|killed|fake|tough") == TRUE, true = 1, false = 0)) %>% 
+    mutate(keyword_count = str_count(text, "death|lie|china|spread|pandemic|outbreak|cause|disease|harm|killed|fake|tough")) %>% filter(negative_tweet == 1) %>% 
+    group_by(created) %>% 
+    summarize(count = n())
+    
+```
+
+```{r}
+coronavirus_twts %>% View()
+```
+
+```{r}
+# install.packages("lda")
+# install.packages("reshape2")
+# install.packages("syuzhet")
+library(ggplot2)
+library(tidyverse)
+library(lda)
+library(reshape2)
+require("ggplot2")
+require("reshape2")
+require("lda")
+library("SnowballC")
+library("tm")
+library("twitteR")
+library("syuzhet")
+library(caTools)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+```
+
+
+# READING IN THE IMPORTED DATA
+
+```{r}
+read <- read.xlsx("full_dataset.xlsx")
+head(read)
+```
+
+# Delete all the URLs, hashtags and other twitter handles
+
+```{r}
+tweets.df2 <- gsub("http.*","",read$text)
+tweets.df2 <- gsub("https.*","",tweets.df2)
+tweets.df2 <- gsub("#.*","",tweets.df2)
+tweets.df2 <- gsub("@.*","",tweets.df2)
+```
+
+# Get the emotion scores for  each tweets, breaks the emotion into 10 different emotions – anger, anticipation, disgust, fear, joy, sadness, surprise, trust, negative and positive.
+
+```{r}
+word.df <- as.vector(tweets.df2)
+emotion.df <- get_nrc_sentiment(word.df)
+emotion.df2 <- cbind(tweets.df2, emotion.df) 
+```
+
+
+# Extract sentiment score for each of the tweets, and category into three types, Negative, Positive and Neutral
+
+```{r}
+sent.value <- get_sentiment(word.df)
+
+category_senti <- ifelse(sent.value < 0, "Negative", ifelse(sent.value > 0, "Positive", "Neutral"))
+```
+
+# Combine the origianl file, sentiment scores and sentiment category
+
+```{r}
+category_senti2 <- cbind(read,category_senti,sent.value)
+head(category_senti2)
+table(category_senti2$category_senti)
+```
+
+# DEFINING THE NEW VARIABLES
+
+Define new variable Negative, when sentiment socre <0, equal to TRUE, when sentiment score >0, equal to FALSE
+Define new variable Positive, when sentiment socre >0, equal to TRUE, when sentiment score <0, equal to FALSE
+
+```{r}
+category_senti2$Negative <- as.factor(category_senti2$sent.value < 0)
+category_senti2$Positive <- as.factor(category_senti2$sent.value > 0)
+category_senti2
+```
+
+# Create a Corpus, convert the text to lowercase, remove all punctuation and stem the words.
+
+```{r}
+corpus <- Corpus(VectorSource(category_senti2$text))
+corpus <- tm_map(corpus, tolower)
+corpus <- tm_map(corpus, removePunctuation)
+stopwords("english")[1:10]
+corpus <- tm_map(corpus, stemDocument)
+corpus[[1]]
+```
+
+# Build a document term matrix, called DTM
+
+```{r}
+DTM <- DocumentTermMatrix(corpus)
+DTM
+inspect(DTM)
+```
+# Remove sparse terms, and convert the DTM to a data frame
+
+```{r}
+inspect(DTM[1000:1005, 505:515])
+sparse_DTM <- removeSparseTerms(DTM, 0.995)
+sparse_DTM
+tweetsSparse <- as.data.frame(as.matrix(sparse_DTM))
+tweetsSparse
+```
+
+# Add the dependent variable, which is Negative, and Positive
+
+```{r}
+colnames(tweetsSparse) <- make.names(colnames(tweetsSparse))
+tweetsSparse$Negative <- category_senti2$Negative
+tweetsSparse$Positive <- category_senti2$Positive
+table(tweetsSparse$Negative)
+table(tweetsSparse$Positive)
+```
+
+# Split data in training/testing sets, for Negative and Positive tweets
+
+```{r}
+set.seed(123)
+
+splitNegative <- sample.split(tweetsSparse$Negative, SplitRatio = 0.7)
+trainSparseNegative <- subset(tweetsSparse, splitNegative == TRUE)
+testSparseNegative <- subset(tweetsSparse, splitNegative == FALSE)
+
+splitPositive <- sample.split(tweetsSparse$Positive, SplitRatio = 0.7)
+trainSparsePositive <- subset(tweetsSparse, splitPositive == TRUE)
+testSparsePositive <- subset(tweetsSparse, splitPositive == FALSE)
+```
+
+
+# The CTREE Molde for Negative and Positive
+
+```{r}
+# For Nagetive tweets
+tweetCARTNegative <- rpart(Negative ~ . , data = trainSparseNegative, method = "class")
+prp(tweetCARTNegative)
+
+# Prediction
+predictCARTNegative <- predict(tweetCARTNegative, newdata = testSparseNegative, type = "class")
+
+cmat_CARTNegative <- table(testSparseNegative$Negative, predictCARTNegative)
+cmat_CARTNegative 
+```
+
+```{r}
+# For Positive
+tweetCARTPositive <- rpart(Positive ~ . , data = trainSparsePositive, method = "class")
+prp(tweetCARTPositive)
+
+# Prediction
+predictCARTPositive <- predict(tweetCARTPositive, newdata = testSparsePositive, type = "class")
+
+cmat_CARTPositive <- table(testSparsePositive$Positive, predictCARTPositive)
+cmat_CARTPositive
+```
+
+
+# Logistic Regression Model and Prediction for Negative and Positive
+
+```{r}
+# For Nagetive tweets
+tweetLogN <- glm(Negative ~ . , data = trainSparseNegative, family = "binomial")
+summary(tweetLogN)
+# Prediction
+tweetLog_predict_testN <- predict(tweetLogN, type = "response", newdata = testSparseNegative)
+
+cmat_logRegrN <- table(testSparseNegative$Negative, tweetLog_predict_testN > 0.5)
+cmat_logRegrN
+
+```
+
+```{r}
+# For Positive 
+tweetLogP <- glm(Positive ~ . , data = trainSparsePositive, family = "binomial")
+summary(tweetLogP)
+
+# Prediction
+tweetLog_predict_testP <- predict(tweetLogP, type = "response", newdata = testSparsePositive)
+
+cmat_logRegrP <- table(testSparsePositive$Positive, tweetLog_predict_testP > 0.5)
+cmat_logRegrP
+```
+
+
+
+# Naive Bayes 
+
+```{r}
+# For Nagetive tweets
+tweetNBN <- naiveBayes(Negative~., data = trainSparseNegative)
+tweetNBN
+```
+
+# Prediction
+
+```{r}
+# perform on the testing set
+nb_prediction <- predict(tweetNBN, testSparseNegative, type="class")
+
+#confusion matrix
+table(testSparseNegative$Negative, nb_prediction, dnn=c("Actual", "Prediction"))
+
+#output results
+data.frame(testSparseNegative, Prediction = nb_prediction)
+
+```
+
+
+```{r}
+# For Positive tweets
+tweetNBP <- naiveBayes(Positive~., data = trainSparsePositive)
+tweetNBP
+
+# Prediction
+cmat_NBP <- table(testSparsePositive$Positive, tweetNBP > 0.5)
+cmat_NBP
+```
+
+# Interaction Effect: Non-Linear Regression
+
+```{r}
+colnames(trainSparsePositive)
+inter_model <- lm(medv ~ lstat * rm * ptratio + I(lstat ^ 2) + I(rm ^ 2) + I(ptratio ^ 2), data = Boston)
+summary(inter_model)
+
+linear_model <- lm(Positive ~ . , data = trainSparsePositive)
+step(object = linear_model, direction = "backward")
+```
+
+# K-Means Clustering
+
+```{r}
+coronavirus_cluster_data <- data.frame(favorited = coronavirus_tweets$favoriteCount, retweetNumber = coronavirus_tweets$retweetCount)
+corona_clusters <- kmeans(coronavirus_cluster_data, centers = 2, nstart = 25)
+corona_clusters
+```
+
+# Interaction with Logistic Regression
+
+```{r}
+# Randomly Selecting Variables
+sample(colnames(trainSparsePositive$Positive), size = 3) # [1] "estabelecimento", "kill", "even"
+
+interaction_model <- glm(Positive ~ estabelecimento * kill * even + I(estabelecimento ^ 2) + I(kill ^ 2) + I(even ^ 2), 
+                         data = trainSparsePositive, family = "binomial")
+summary(interaction_model)
+```
+
+```{r}
+interaction_model_negative <- glm(Negative ~ estabelecimento * kill * even + I(estabelecimento ^ 2) + I(kill ^ 2) + 
+                                      I(even ^ 2),data = trainSparseNegative, family = "binomial")
+summary(interaction_model)
+```
+
